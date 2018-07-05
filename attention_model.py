@@ -143,22 +143,22 @@ class EncoderBasic:
         hidden_states.close()
         return hidden_states_stack
 
-    def extract_more_info(self, batch_of_input):
+    def extract_more_info(self, hid_states_from_lower_layer):
         """
-        Encode the sentence to vector represent
-        :param batch_of_sentences: batch of source sentences (in this case, each sentence is a list of word indices)
+        Encode the hidden states from previous layer
+        :param hid_states_from_lower_layer: 3-d hidden states
         :return:
         """
         cell_state = tf.zeros([self.lstm_cell.batch_size, self.lstm_cell.hidden_size])
         hidden_state = tf.zeros([self.lstm_cell.batch_size, self.lstm_cell.hidden_size])
-        sentence_length = tf.shape(batch_of_input)[1]  # length of a sentence
-        hidden_states = tf.TensorArray(tf.float32, size=sentence_length, dynamic_size=True, clear_after_read=False)
+        input_length = tf.shape(hid_states_from_lower_layer)[0]  # length of a sentence
+        hidden_states = tf.TensorArray(tf.float32, size=input_length, dynamic_size=True, clear_after_read=False)
 
         def cond(i, *_):
-            return tf.less(i, sentence_length)
+            return tf.less(i, input_length)
 
         def body(i, c, hid_states):
-            x = batch_of_input[:, i]
+            x = hid_states_from_lower_layer[i]
             c, new_hs = tf.cond(tf.equal(i, 0),
                                 true_fn=lambda: self.lstm_cell.run_step(x, c, hidden_state),
                                 false_fn=lambda: self.lstm_cell.run_step(x, c, hid_states.read(i - 1)))
@@ -196,7 +196,8 @@ class GlobalAttentionDecoder:
         self.bias_score = tf.Variable(tf.zeros([lstm_cell.batch_size, vocab_size]))
         self.embeddings = embeddings
         self.weight_attention = tf.Variable(
-            tf.random_uniform([attention_input_size+lstm_cell.hidden_size, lstm_cell.hidden_size], minval=-0.1, maxval=0.1, seed=6)
+            tf.random_uniform([attention_input_size+lstm_cell.hidden_size, lstm_cell.hidden_size],
+            minval=-0.1, maxval=0.1, seed=6)
         )
 
     def decode(self, labels, encode_hid_states, last_encode_hid_state):
@@ -374,7 +375,7 @@ def train_model():
     )
     fw_hid_states, bw_hid_states = first_layer_encoder.encode(x_batch)
     # concatenate hidden states
-    first_layer_hid_states = tf.concat([fw_hid_states, bw_hid_states], axis=2)
+    first_layer_hid_states = tf.concat([fw_hid_states, bw_hid_states], axis=-1)
     # second encoder layer
     second_layer_encoder = EncoderBasic(
         LSTMcell(hidden_size=hidden_size, input_size=hidden_size*2, batch_size=batch_size),
