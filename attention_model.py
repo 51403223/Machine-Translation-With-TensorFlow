@@ -184,13 +184,11 @@ class BidirectionalEncoder:
         batch_of_senteces_reverse = tf.reverse(batch_of_senteces, axis=[1])
         fw_hid_states = self.fw_encoder.encode(batch_of_senteces)  # shape [time, batch, hidden_size]
         bw_hid_states = self.bw_encoder.encode(batch_of_senteces_reverse)
-        # concatenate hidden states
-        concat_hid_states = tf.concat([fw_hid_states, bw_hid_states], axis=2)
-        return concat_hid_states
+        return fw_hid_states, bw_hid_states
 
 
 class GlobalAttentionDecoder:
-    def __init__(self, lstm_cell, vocab_size, embeddings, attention_input_size, attention_output_size):
+    def __init__(self, lstm_cell, vocab_size, embeddings, attention_input_size):
         self.lstm_cell = lstm_cell
         self.weight_score = tf.Variable(
             tf.random_uniform(shape=[lstm_cell.hidden_size, vocab_size], minval=-0.1, maxval=0.1, seed=5)
@@ -198,7 +196,7 @@ class GlobalAttentionDecoder:
         self.bias_score = tf.Variable(tf.zeros([lstm_cell.batch_size, vocab_size]))
         self.embeddings = embeddings
         self.weight_attention = tf.Variable(
-            tf.random_uniform([attention_input_size, attention_output_size], minval=-0.1, maxval=0.1, seed=6)
+            tf.random_uniform([attention_input_size+lstm_cell.hidden_size, lstm_cell.hidden_size], minval=-0.1, maxval=0.1, seed=6)
         )
 
     def decode(self, labels, encode_hid_states, last_encode_hid_state):
@@ -241,12 +239,12 @@ class GlobalAttentionDecoder:
             c, new_hs = self.lstm_cell.run_step(y, c, hid_states.read(i - 1))  # predict next word
             # attention
             context_vector = self.context_vector(encode_hid_states, new_hs)
-            new_hs = tf.tanh(
+            hs_with_attention = tf.tanh(
                 tf.matmul(tf.concat([context_vector, new_hs], axis=1), self.weight_attention)
             )
-            hid_states = hid_states.write(i, new_hs)
+            hid_states = hid_states.write(i, hs_with_attention)
             score = tf.add(
-                tf.matmul(new_hs, self.weight_score), self.bias_score
+                tf.matmul(hs_with_attention, self.weight_score), self.bias_score
             )
             predicts = predicts.write(i, score)
             return i + 1, c, predicts, hid_states, lbs_transform
@@ -369,24 +367,30 @@ def train_model():
     #################### build graph ##########################
     hidden_size = 128  # number of hidden unit
     print('Building graph...')
-
+    # first encoder layer
     first_layer_encoder = BidirectionalEncoder(embedding_src,
         fw_cell=LSTMcell(hidden_size=hidden_size, input_size=word2vec_dim, batch_size=batch_size),
         bw_cell=LSTMcell(hidden_size=hidden_size, input_size=word2vec_dim, batch_size=batch_size)
     )
+    fw_hid_states, bw_hid_states = first_layer_encoder.encode(x_batch)
+    # concatenate hidden states
+    first_layer_hid_states = tf.concat([fw_hid_states, bw_hid_states], axis=2)
+    # second encoder layer
     second_layer_encoder = EncoderBasic(
-        LSTMcell(hidden_size=hidden_size, input_size=2*hidden_size, batch_size=batch_size),
+        LSTMcell(hidden_size=hidden_size, input_size=hidden_size*2, batch_size=batch_size),
         embedding_src
     )
+    second_layer_hid_states = second_layer_encoder.extract_more_info(first_layer_hid_states)
+    # attention decoder
     attention_decoder = GlobalAttentionDecoder(
         LSTMcell(hidden_size=hidden_size, input_size=word2vec_dim, batch_size=batch_size),
         vocab_size=len(vocab_tgt),
-        embeddings=embedding_tgt
+        embeddings=embedding_tgt,
+        attention_input_size=128
     )
+
     global_step = tf.Variable(0, trainable=False, name='global_step')
-    first_layer_hid_states = first_layer_encoder.encode(x_batch)
-    second_layer_hid_states = second_layer_encoder.extract_more_info(first_layer_hid_states)
-    logits, _, labels = attention_decoder.decode(y_batch, second_layer_hid_states, second_layer_hid_states[-1])
+    logits, _, labels = attention_decoder.decode(y_batch, fw_hid_states, second_layer_hid_states[-1])
     cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=labels, logits=logits)  # shape=[time, batch]
     apply_penalties = tf.transpose(cross_entropy) * tf.cast(padding_matrix, tf.float32)
     loss = tf.reduce_sum(apply_penalties) / batch_size
