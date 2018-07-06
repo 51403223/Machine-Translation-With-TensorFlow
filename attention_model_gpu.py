@@ -9,7 +9,7 @@ sos_vocab_id = 2
 unk_vocab_id = 1
 
 
-print('1')
+print('6')
 class LSTMcell():
     def __init__(self, hidden_size, input_size, batch_size):
         """
@@ -28,19 +28,19 @@ class LSTMcell():
         xavier_sigmoid = np.sqrt(4.0 / (hidden_size + input_size))
         self.weight_update = tf.Variable(
             tf.random_uniform(shape=[hidden_size + input_size, hidden_size],
-                              minval=-xavier_sigmoid, maxval=xavier_sigmoid)
+                              minval=-xavier_sigmoid, maxval=xavier_sigmoid, seed=1)
         )
         self.weight_forget = tf.Variable(
             tf.random_uniform(shape=[hidden_size + input_size, hidden_size],
-                              minval=-xavier_sigmoid, maxval=xavier_sigmoid)
+                              minval=-xavier_sigmoid, maxval=xavier_sigmoid, seed=2)
         )
         self.weight_candidate = tf.Variable(
             tf.random_uniform(shape=[hidden_size + input_size, hidden_size],
-                              minval=-xavier_tanh, maxval=xavier_tanh)
+                              minval=-xavier_tanh, maxval=xavier_tanh, seed=3)
         )
         self.weight_output = tf.Variable(
             tf.random_uniform(shape=[hidden_size + input_size, hidden_size],
-                              minval=-xavier_sigmoid, maxval=xavier_sigmoid)
+                              minval=-xavier_sigmoid, maxval=xavier_sigmoid, seed=4)
         )
 
         self.bias_update = tf.Variable(tf.zeros(shape=[batch_size, hidden_size]))
@@ -213,7 +213,6 @@ class GlobalAttentionDecoder:
         """
         cell_state = tf.zeros([self.lstm_cell.batch_size, self.lstm_cell.hidden_size])
         sentence_length = tf.shape(labels)[1]
-        hidden_states = tf.TensorArray(tf.float32, size=sentence_length + 1, dynamic_size=True, clear_after_read=False)
         logits = tf.TensorArray(tf.float32, size=sentence_length + 1, dynamic_size=True,
                                 clear_after_read=False)  # model's predictions
         labels_transform = tf.TensorArray(tf.int32, size=sentence_length + 1, dynamic_size=True,
@@ -222,7 +221,6 @@ class GlobalAttentionDecoder:
         cell_state, hidden_state = self.lstm_cell.run_step(
             [self.embeddings[sos_vocab_id]] * self.lstm_cell.batch_size,
             cell_state, last_encode_hid_state)
-        hidden_states = hidden_states.write(0, hidden_state)
         score_vector = tf.add(
             tf.matmul(hidden_state, self.weight_score), self.bias_score
         )
@@ -232,37 +230,33 @@ class GlobalAttentionDecoder:
         def cond(i, *_):
             return tf.less_equal(i, sentence_length)
 
-        def body(i, c, predicts, hid_states, lbs_transform):
+        def body(i, c, predicts, previous_hid_state, lbs_transform):
             y = labels[:, i - 1]  # input shift left by 1
             lbs_transform = lbs_transform.write(i - 1, y)  # also shift by 1
             # y = tf.map_fn(lambda e: tf.nn.embedding_lookup(self.embeddings, e), y, dtype=tf.float32)
             y = tf.nn.embedding_lookup(self.embeddings, y)
-            c, new_hs = self.lstm_cell.run_step(y, c, hid_states.read(i - 1))  # predict next word
+            c, new_hs = self.lstm_cell.run_step(y, c, previous_hid_state)  # predict next word
             # attention
             context_vector = self.context_vector(encode_hid_states, new_hs)
             hs_with_attention = tf.tanh(
                 tf.matmul(tf.concat([context_vector, new_hs], axis=1), self.weight_attention) + self.bias_attention
             )
-            hid_states = hid_states.write(i, hs_with_attention)
             score = tf.add(
                 tf.matmul(hs_with_attention, self.weight_score), self.bias_score
             )
             predicts = predicts.write(i, score)
-            return i + 1, c, predicts, hid_states, lbs_transform
+            return i + 1, c, predicts, hs_with_attention, lbs_transform
 
-        _, _, logits, hidden_states, labels_transform = tf.while_loop(cond, body,
-                                                                      [1, cell_state, logits, hidden_states,
-                                                                       labels_transform], swap_memory=True)  # loop at time step 0+1
+        _, _, logits, _, labels_transform = tf.while_loop(cond, body,
+                                [1, cell_state, logits, labels_transform], swap_memory=True)  # loop at time step 0+1
         # add <eos> to label
         labels_transform = labels_transform.write(sentence_length, [eos_vocab_id] * self.lstm_cell.batch_size)
 
         logits_stack = logits.stack()
         logits.close()
-        hidden_states_stack = hidden_states.stack()
-        hidden_states.close()
         labels_transform_stack = labels_transform.stack()
         labels_transform.close()
-        return logits_stack, hidden_states_stack, labels_transform_stack
+        return logits_stack, labels_transform_stack
 
     def context_vector(self, encode_hid_states, hidden_state):
         """
@@ -357,7 +351,8 @@ def train_model():
 
     # create dataset contains both previous training sets
     train_dataset = tf.data.Dataset.zip((train_set_src, train_set_tgt, target_weights))
-    train_dataset = train_dataset.shuffle(buffer_size=training_size)
+    train_dataset = train_dataset.shuffle(buffer_size=training_size, seed=1)
+    # train_dataset = train_dataset.shuffle(buffer_size=training_size)
     train_dataset = train_dataset.apply(
         tf.contrib.data.padded_batch_and_drop_remainder(batch_size, ([None], [None], [None])))
     train_iter = train_dataset.make_initializable_iterator()
@@ -390,7 +385,7 @@ def train_model():
     )
 
     global_step = tf.Variable(0, trainable=False, name='global_step')
-    logits, _, labels = attention_decoder.decode(y_batch, fw_hid_states, second_layer_hid_states[-1])
+    logits, labels = attention_decoder.decode(y_batch, fw_hid_states, second_layer_hid_states[-1])
     cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=labels, logits=logits)  # shape=[time, batch]
     apply_penalties = tf.transpose(cross_entropy) * tf.cast(padding_matrix, tf.float32)
     loss = tf.reduce_sum(apply_penalties) / batch_size
@@ -398,11 +393,11 @@ def train_model():
     gradients = tf.gradients(loss, params)  # derivation of loss by paramsz
     max_gradient_norm = 5
     clipped_gradients, _ = tf.clip_by_global_norm(gradients, max_gradient_norm)
-    starting_rate = 0.1
+    starting_rate = 0.5
     decay_epochs = 4  # decay learning rate on every n epochs exclude first n epochs
     decay_step = (training_size // batch_size) * decay_epochs  # num_step_in_single_epoch * n
     learning_rate = tf.train.exponential_decay(learning_rate=starting_rate, global_step=global_step,
-                                               decay_steps=decay_step, decay_rate=0.1, staircase=True)
+                                               decay_steps=decay_step, decay_rate=0.8, staircase=True)
     optimizer = tf.train.GradientDescentOptimizer(learning_rate)
     optimizer = optimizer.apply_gradients(zip(clipped_gradients, params), global_step=global_step)
 
@@ -435,7 +430,7 @@ def train_model():
                         return False
                     # print('Step {0}: loss={1} lr={2}'.format(step, l, lr))
                     if step % log_frequency == 0:
-                        print('Step {0}: loss={1} lr={2}'.format(step, l, lr))
+                       print('Step {0}: loss={1} lr={2}'.format(step, l, lr))
                 except tf.errors.OutOfRangeError:
                     avg_loss = total_loss / (training_size // batch_size)
                     loss_epochs = loss_epochs.write(epoch, tf.cast(avg_loss, tf.float32))  # write average loss of epoch
