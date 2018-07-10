@@ -104,12 +104,12 @@ def train_model():
     enc_1st_outputs, enc_1st_states = tf.nn.bidirectional_dynamic_rnn(
         cell_fw=tf.nn.rnn_cell.BasicLSTMCell(hidden_size),
         cell_bw=tf.nn.rnn_cell.BasicLSTMCell(hidden_size),
-        inputs=tf.nn.embedding_lookup(embedding_src, tf.transpose(x_batch)),
+        inputs=tf.nn.embedding_lookup(embedding_src, x_batch),
         sequence_length=encode_seq_lens,
         swap_memory=True,
-        time_major=True,
+        time_major=False,
         dtype=tf.float32
-    )
+    )  # [batch, time, hid]
     fw_enc_1st_hid_states, bw_enc_1st_hid_states = enc_1st_outputs
     # fw_enc_1st_last_hid, bw_enc_1st_last_hid = enc_1st_states
 
@@ -124,27 +124,31 @@ def train_model():
         sequence_length=encode_seq_lens,
         dtype=tf.float32,
         swap_memory=True,
-        time_major=True
+        time_major=False
     )
 
     # ----------decoder
+    encode_output_size = hidden_size*2
     decode_seq_lens = tf.reshape(len_ys, shape=[batch_size])
+    attention_output_size = 256
     attention_mechanism = tf.contrib.seq2seq.LuongAttention(
-        num_units=hidden_size,
-        memory=enc_2nd_outputs,
+        num_units=encode_output_size,
+        memory=enc_2nd_outputs,  # require [batch, time, ...]
         memory_sequence_length=encode_seq_lens,
         dtype=tf.float32
     )
-    attention_output_size = 256
-    attention_cell = tf.nn.rnn_cell.BasicLSTMCell(num_units=hidden_size)
+    attention_cell = tf.nn.rnn_cell.BasicLSTMCell(num_units=encode_output_size)
     attention_cell = tf.contrib.seq2seq.AttentionWrapper(
         attention_cell, attention_mechanism,
         attention_layer_size=attention_output_size
     )
     add_sos = tf.concat([tf.reshape([sos_vocab_id]*batch_size, [batch_size, 1]), y_batch], axis=-1)
+    decoder_initial_state = attention_cell.zero_state(dtype=tf.float32, batch_size=batch_size)
+    decoder_initial_state = decoder_initial_state.clone(cell_state=enc_2nd_states[-1])
     dec_outputs, _ = tf.nn.dynamic_rnn(
         cell=attention_cell,
-        inputs=tf.nn.embedding_lookup(embedding_src, tf.transpose(add_sos)),
+        inputs=tf.nn.embedding_lookup(embedding_tgt, tf.transpose(add_sos)),
+        initial_state=decoder_initial_state,
         sequence_length=decode_seq_lens,
         dtype=tf.float32,
         swap_memory=True,
@@ -193,8 +197,8 @@ def train_model():
 
     #################### train ########################
     log_frequency = 100
-    model_path = "./checkpoint_gpu/model"
-    checkpoint_path = "./checkpoint_gpu"
+    model_path = "./checkpoint_framework/model"
+    checkpoint_path = "./checkpoint_framework"
     loss_epochs = tf.TensorArray(tf.float32, size=num_epochs, dynamic_size=True)
     training_epoch = tf.Variable(0, trainable=False, name='training_epoch')
     saver = tf.train.Saver()
@@ -203,7 +207,7 @@ def train_model():
     with tf.Session(config=config) as sess:
         try:
             saver.restore(sess, tf.train.latest_checkpoint(checkpoint_dir=checkpoint_path))
-            print('...............Restored from checkpoint_gpu')
+            print('...............Restored from checkpoint_framework')
         except:
             sess.run(tf.global_variables_initializer())
         start_epoch = sess.run(training_epoch)
