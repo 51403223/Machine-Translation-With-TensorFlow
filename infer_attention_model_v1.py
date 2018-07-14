@@ -2,6 +2,7 @@ import tensorflow as tf
 from utils import embedding
 import os
 import numpy as np
+import bleu
 
 eos_vocab_id = 0
 sos_vocab_id = 2
@@ -23,7 +24,7 @@ def test_model():
     embeddingHandler = embedding.Embedding()
 
     ############### load embedding for source language ###############
-    src_input_path = data_path + 'train.vi'  # path to training file used for encoder
+    src_input_path = data_path + 'tst2013.vi'  # path to training file used for encoder
     src_embedding_output_path = data_path + 'embedding.vi'  # path to file word embedding
     src_vocab_path = data_path + 'vocab.vi'  # path to file vocabulary
 
@@ -37,7 +38,7 @@ def test_model():
     embedding_src = tf.constant(embedding_src)
 
     ################ load embedding for target language ####################
-    tgt_input_path = data_path + 'train.en'
+    tgt_input_path = data_path + 'tst2013.en'
     tgt_embedding_output_path = data_path + 'embedding.en'
     tgt_vocab_path = data_path + 'vocab.en'
 
@@ -165,8 +166,7 @@ def test_model():
 
     # infer
     def loop_fn(time, cell_output, cell_state, loop_state):
-        elements_finished = time >= decode_seq_lens
-        finished = tf.reduce_all(elements_finished)
+        elements_finished = time >= decode_seq_lens  # finish by sentence length
         if cell_output is None:  # time = 0
             next_cell_state = decoder_initial_state
             next_input = tf.nn.embedding_lookup(embedding_tgt, [sos_vocab_id]*batch_size)
@@ -178,6 +178,8 @@ def test_model():
             )
             softmax = tf.nn.softmax(score)
             predict = tf.argmax(softmax, axis=-1, output_type=tf.int32)
+            elements_finished = tf.logical_or(elements_finished, tf.equal(predict, eos_vocab_id))  # or finish by generated <eos>
+            finished = tf.reduce_all(elements_finished)
             next_input = tf.cond(
                 finished,
                 lambda: tf.nn.embedding_lookup(embedding_tgt, [eos_vocab_id]*batch_size),
@@ -189,7 +191,8 @@ def test_model():
         return elements_finished, next_input, next_cell_state, emit_output, next_loop_state
 
     outputs_ta, final_state, _ = tf.nn.raw_rnn(attention_cell, loop_fn)
-    outputs = outputs_ta.stack()
+    outputs = outputs_ta.stack()  # [time, batch]
+    outputs = tf.transpose(outputs)  # reshape to [batch, time]
     # -----------calculate score
 
     # dec_outputs_len = tf.shape(dec_outputs)[0]
@@ -207,26 +210,39 @@ def test_model():
     #
 
     #################### train ########################
-    log_frequency = 100
-    model_path = "./checkpoint_framework/model"
-    checkpoint_path = "./checkpoint_framework"
+    model_path = "./checkpoint_v1/model"
+    checkpoint_path = "./checkpoint_v1"
     saver = tf.train.Saver()
     with tf.Session() as sess:
         saver.restore(sess, tf.train.latest_checkpoint(checkpoint_dir=checkpoint_path))
-        print('...............Restored from checkpoint_framework')
+        print('...............Restored from checkpoint_v1')
         sess.run(train_iter.initializer)
+        references = []
+        # Note: references has shape 3-d to pass into compute_bleu function
+        # first dimension is batch size, second dimension is number of references for 1 translation
+        # third dimension is length of each sentence (maybe differ from each other)
+        translation = []
         while True:
+        # for i in range(10):
+        #     print(i)
             try:
                 predictions, labels = sess.run([outputs, y_batch])
-
+                # perform trimming <eos> to not to get additional bleu score by overlap padding
+                predictions = [np.trim_zeros(predict, 'b') for predict in predictions]
+                labels = [np.trim_zeros(lb, 'b') for lb in labels]
+                # # convert ids to words
+                # predictions = [embeddingHandler.ids_to_words(predict, vocab_tgt) for predict in predictions]
+                # labels = [embeddingHandler.ids_to_words(lb, vocab_tgt) for lb in labels]
+                references.extend(labels)
+                translation.extend(predictions)
             except tf.errors.OutOfRangeError:
                 break
 
+        # compute bleu score
+        reshaped_references = [[ref] for ref in references]
+        bleu_score, *_ = bleu.compute_bleu(reshaped_references, translation, max_order=4, smooth=False)
+        print("bleu=", 100*bleu_score)
 
 test_model()
-# # train loop prevents 'nan' occurs
-# while True:
-#     train_result = train_model()
-#     if train_result is True:
-#         break
-
+# tst2012: bleu= 20.476983485168752, max_order=4, smooth=False
+# tst2012: bleu= 23.507148735156456, max_order=4, smooth=False

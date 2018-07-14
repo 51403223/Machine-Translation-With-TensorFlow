@@ -107,3 +107,6 @@ class Embedding:
                     sentence_ids.append(1)  # 1 is index of <unk> in vocabulary
             sentences_as_ids.append(sentence_ids)
         return sentences_as_ids
+
+    def ids_to_words(self, list_ids, vocab):
+        return [vocab[id] for id in list_ids]
