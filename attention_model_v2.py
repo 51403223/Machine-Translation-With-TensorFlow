@@ -208,15 +208,15 @@ def train_model():
 
     #################### train ########################
     log_frequency = 100
-    model_path = "./checkpoint_framework/model"
-    checkpoint_path = "./checkpoint_framework"
+    model_path = "./checkpoint_v2/model"
+    checkpoint_path = "./checkpoint_v2"
     loss_epochs = tf.TensorArray(tf.float32, size=num_epochs, dynamic_size=True)
     training_epoch = tf.Variable(0, trainable=False, name='training_epoch')
     saver = tf.train.Saver()
     with tf.Session() as sess:
         try:
             saver.restore(sess, tf.train.latest_checkpoint(checkpoint_dir=checkpoint_path))
-            print('...............Restored from checkpoint_framework')
+            print('...............Restored from checkpoint_v2')
         except:
             sess.run(tf.global_variables_initializer())
         start_epoch = sess.run(training_epoch)

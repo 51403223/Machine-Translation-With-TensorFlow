@@ -206,12 +206,12 @@ def test_model():
     #
 
     #################### train ########################
-    model_path = "./checkpoint_framework/model"
-    checkpoint_path = "./checkpoint_framework"
+    model_path = "./checkpoint_v2/model"
+    checkpoint_path = "./checkpoint_v2"
     saver = tf.train.Saver()
     with tf.Session() as sess:
         saver.restore(sess, tf.train.latest_checkpoint(checkpoint_dir=checkpoint_path))
-        print('...............Restored from checkpoint_v1')
+        print('Inferring')
         sess.run(train_iter.initializer)
         references = []
         # Note: references has shape 3-d to pass into compute_bleu function
