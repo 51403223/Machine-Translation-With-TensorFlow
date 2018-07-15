@@ -24,7 +24,7 @@ def test_model():
     embeddingHandler = embedding.Embedding()
 
     ############### load embedding for source language ###############
-    src_input_path = data_path + 'tst2013.vi'  # path to training file used for encoder
+    src_input_path = data_path + 'tst2012.vi'  # path to training file used for encoder
     src_embedding_output_path = data_path + 'embedding.vi'  # path to file word embedding
     src_vocab_path = data_path + 'vocab.vi'  # path to file vocabulary
 
@@ -38,7 +38,7 @@ def test_model():
     embedding_src = tf.constant(embedding_src)
 
     ################ load embedding for target language ####################
-    tgt_input_path = data_path + 'tst2013.en'
+    tgt_input_path = data_path + 'tst2012.en'
     tgt_embedding_output_path = data_path + 'embedding.en'
     tgt_vocab_path = data_path + 'vocab.en'
 
@@ -82,13 +82,9 @@ def test_model():
     test_set_tgt_len = create_dataset([[len(sentence)+1] for sentence in sentences_tgt_as_ids])
     # Note: [len(sentence)+1] for later <sos>/<eos>
     test_set_tgt_padding = create_dataset([np.ones(len(sentence)+1, np.float32) for sentence in sentences_tgt_as_ids])
-    ## padding matrix
-    # target_weights = create_dataset([np.ones(len(sentence) + 1) for sentence in sentences_tgt_as_ids])
 
     # create dataset contains both previous training sets
     train_dataset = tf.data.Dataset.zip((test_set_src, test_set_tgt, test_set_src_len, test_set_tgt_len, test_set_tgt_padding))
-    # train_dataset = train_dataset.shuffle(buffer_size=training_size, seed=9)
-    # train_dataset = train_dataset.shuffle(buffer_size=training_size)
     train_dataset = train_dataset.apply(
         tf.contrib.data.padded_batch_and_drop_remainder(batch_size, ([None], [None], [1], [1], [None])))
     train_iter = train_dataset.make_initializable_iterator()
@@ -142,18 +138,18 @@ def test_model():
         attention_cell, attention_mechanism,
         attention_layer_size=attention_output_size
     )
-    # add_sos = tf.concat([tf.reshape([sos_vocab_id]*batch_size, [batch_size, 1]), y_batch], axis=-1)
-    decoder_initial_state = attention_cell.zero_state(dtype=tf.float32, batch_size=batch_size)
-    decoder_initial_state = decoder_initial_state.clone(cell_state=enc_2nd_states[-1])
-    # dec_outputs, _ = tf.nn.dynamic_rnn(
-    #     cell=attention_cell,
-    #     inputs=tf.nn.embedding_lookup(embedding_tgt, tf.transpose(add_sos)),
-    #     initial_state=decoder_initial_state,
-    #     sequence_length=decode_seq_lens,
-    #     dtype=tf.float32,
-    #     swap_memory=True,
-    #     time_major=True
-    # )
+    state_to_clone = attention_cell.zero_state(dtype=tf.float32, batch_size=batch_size)
+    decoder_initial_state = tf.contrib.seq2seq.AttentionWrapperState(
+        cell_state=tf.nn.rnn_cell.LSTMStateTuple(
+            c=tf.zeros_like(enc_2nd_states[-1].c, dtype=tf.float32),
+            h=enc_2nd_states[-1].h
+        ),
+        attention=state_to_clone.attention,
+        time=state_to_clone.time,
+        alignments=state_to_clone.alignments,
+        alignment_history=state_to_clone.alignment_history,
+        attention_state=state_to_clone.attention_state
+    )
 
     # projection
     tgt_vocab_size = len(vocab_tgt)
@@ -210,8 +206,8 @@ def test_model():
     #
 
     #################### train ########################
-    model_path = "./checkpoint_v1/model"
-    checkpoint_path = "./checkpoint_v1"
+    model_path = "./checkpoint_framework/model"
+    checkpoint_path = "./checkpoint_framework"
     saver = tf.train.Saver()
     with tf.Session() as sess:
         saver.restore(sess, tf.train.latest_checkpoint(checkpoint_dir=checkpoint_path))
@@ -241,7 +237,4 @@ def test_model():
         # compute bleu score
         reshaped_references = [[ref] for ref in references]
         bleu_score, *_ = bleu.compute_bleu(reshaped_references, translation, max_order=4, smooth=False)
-        print("bleu=", 100*bleu_score)
-
-
-test_model()
+        return bleu_score
