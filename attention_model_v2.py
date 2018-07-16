@@ -3,7 +3,7 @@ from utils import embedding
 import os
 import time
 import numpy as np
-import infer_attention_model_v2
+
 
 eos_vocab_id = 0
 sos_vocab_id = 2
@@ -242,8 +242,6 @@ def train_model():
                     print('Average loss=', avg_loss)
                     break
 
-            bleu_infer = infer_attention_model_v2.test_model()
-            print('bleu={}'.format(bleu_infer))
             print('Epoch {} train in {} minutes'.format(epoch + 1, (time.time() - start_time) / 60.0))
             print('------------------------------------')
 

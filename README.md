@@ -17,3 +17,7 @@ _ Encoder pass both cell state and last hidden state to Decoder as initial state
 VERSION 2
 Same graph as version 1
 Difference: just last hidden state of Encoder pass to Decoder at first step, cell state of Decoder will be zeros
+Greedy Search
+    * with decay learning rate after every 4 epochs
+    _ tst2012: bleu= 20.088968527140327, max_order=4, smooth=False
+    _ tst2013: bleu= 22.970538348802798, max_order=4, smooth=False

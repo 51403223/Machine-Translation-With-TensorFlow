@@ -24,7 +24,7 @@ def test_model():
     embeddingHandler = embedding.Embedding()
 
     ############### load embedding for source language ###############
-    src_input_path = data_path + 'tst2012.vi'  # path to training file used for encoder
+    src_input_path = data_path + 'tst2013.vi'  # path to training file used for encoder
     src_embedding_output_path = data_path + 'embedding.vi'  # path to file word embedding
     src_vocab_path = data_path + 'vocab.vi'  # path to file vocabulary
 
@@ -38,7 +38,7 @@ def test_model():
     embedding_src = tf.constant(embedding_src)
 
     ################ load embedding for target language ####################
-    tgt_input_path = data_path + 'tst2012.en'
+    tgt_input_path = data_path + 'tst2013.en'
     tgt_embedding_output_path = data_path + 'embedding.en'
     tgt_vocab_path = data_path + 'vocab.en'
 
@@ -211,7 +211,7 @@ def test_model():
     saver = tf.train.Saver()
     with tf.Session() as sess:
         saver.restore(sess, tf.train.latest_checkpoint(checkpoint_dir=checkpoint_path))
-        print('Inferring')
+        print('Inferring...')
         sess.run(train_iter.initializer)
         references = []
         # Note: references has shape 3-d to pass into compute_bleu function
