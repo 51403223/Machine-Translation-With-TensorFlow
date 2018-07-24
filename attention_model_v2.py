@@ -3,6 +3,7 @@ from utils import embedding
 import os
 import time
 import numpy as np
+import infer_attention_model_v2
 
 
 eos_vocab_id = 0
@@ -231,15 +232,17 @@ def train_model():
                     total_loss += l
                     if np.isnan(l):
                         return False
-                    print('Step {0}: loss={1} lr={2}'.format(step, l, lr))
-                    # if step % log_frequency == 0:
-                    #     print('Step {0}: loss={1} lr={2}'.format(step, l, lr))
+                    # print('Step {0}: loss={1} lr={2}'.format(step, l, lr))
+                    if step % log_frequency == 0:
+                        print('Step {0}: loss={1} lr={2}'.format(step, l, lr))
                 except tf.errors.OutOfRangeError:
                     avg_loss = total_loss / (training_size // batch_size)
                     loss_epochs = loss_epochs.write(epoch, tf.cast(avg_loss, tf.float32))  # write average loss of epoch
                     sess.run(training_epoch.assign(epoch + 1))  # starting epoch if restore
-                    saver.save(sess, model_path, epoch)
+                    path = saver.save(sess, model_path, epoch)
                     print('Average loss=', avg_loss)
+                    bleu = infer_attention_model_v2.test_model(path, 'tst2012.vi', 'tst2012.en')
+                    print('bleu={}'.format(bleu * 100))
                     break
 
             print('Epoch {} train in {} minutes'.format(epoch + 1, (time.time() - start_time) / 60.0))

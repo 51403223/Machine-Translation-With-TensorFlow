@@ -13,6 +13,9 @@ _ Encoder pass both cell state and last hidden state to Decoder as initial state
     * learning rate fixed to 1.0
     _ tst2012: bleu= 18.770609325156386, max_order=4, smooth=False
     _ tst2013: bleu= 20.645434410841183, max_order=4, smooth=False
+    b) Beam Search:
+    _ tst2012: bleu=11.949528136317774, max_order=4, smooth=False, beam_width=3
+    _ tst2013: bleu=13.717554450112146, max_order=4, smooth=False, beam_width=3
 
 VERSION 2
 Same graph as version 1
@@ -21,3 +24,6 @@ Greedy Search
     * with decay learning rate after every 4 epochs
     _ tst2012: bleu= 20.088968527140327, max_order=4, smooth=False
     _ tst2013: bleu= 22.970538348802798, max_order=4, smooth=False
+Beam Search:
+    _ tst2012: bleu=, max_order=4, smooth=False
+    _ tst2013: bleu=, max_order=4, smooth=False

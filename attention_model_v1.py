@@ -3,6 +3,7 @@ from utils import embedding
 import os
 import time
 import numpy as np
+import infer_attention_model_v1
 
 eos_vocab_id = 0
 sos_vocab_id = 2
@@ -88,7 +89,7 @@ def train_model():
 
     # create dataset contains both previous training sets
     train_dataset = tf.data.Dataset.zip((train_set_src, train_set_tgt, train_set_src_len, train_set_tgt_len, train_set_tgt_padding))
-    train_dataset = train_dataset.shuffle(buffer_size=training_size, seed=9)
+    train_dataset = train_dataset.shuffle(buffer_size=training_size)
     # train_dataset = train_dataset.shuffle(buffer_size=training_size)
     train_dataset = train_dataset.apply(
         tf.contrib.data.padded_batch_and_drop_remainder(batch_size, ([None], [None], [1], [1], [None])))
@@ -197,15 +198,15 @@ def train_model():
 
     #################### train ########################
     log_frequency = 100
-    model_path = "./checkpoint_framework/model"
-    checkpoint_path = "./checkpoint_framework"
+    model_path = "./checkpoint_v1/model"
+    checkpoint_path = "./checkpoint_v1"
     loss_epochs = tf.TensorArray(tf.float32, size=num_epochs, dynamic_size=True)
     training_epoch = tf.Variable(0, trainable=False, name='training_epoch')
     saver = tf.train.Saver()
     with tf.Session() as sess:
         try:
             saver.restore(sess, tf.train.latest_checkpoint(checkpoint_dir=checkpoint_path))
-            print('...............Restored from checkpoint_framework')
+            print('...............Restored from checkpoint_v1')
         except:
             sess.run(tf.global_variables_initializer())
         start_epoch = sess.run(training_epoch)
@@ -220,15 +221,17 @@ def train_model():
                     total_loss += l
                     if np.isnan(l):
                         return False
-                    print('Step {0}: loss={1} lr={2}'.format(step, l, lr))
-                    # if step % log_frequency == 0:
-                    #     print('Step {0}: loss={1} lr={2}'.format(step, l, lr))
+                    # print('Step {0}: loss={1} lr={2}'.format(step, l, lr))
+                    if step % log_frequency == 0:
+                        print('Step {0}: loss={1} lr={2}'.format(step, l, lr))
                 except tf.errors.OutOfRangeError:
                     avg_loss = total_loss / (training_size // batch_size)
                     loss_epochs = loss_epochs.write(epoch, tf.cast(avg_loss, tf.float32))  # write average loss of epoch
                     sess.run(training_epoch.assign(epoch + 1))  # starting epoch if restore
-                    saver.save(sess, model_path, epoch)
+                    path = saver.save(sess, model_path, epoch)
                     print('Average loss=', avg_loss)
+                    bleu = infer_attention_model_v1.test_model(path, 'tst2012.vi', 'tst2012.en')
+                    print('bleu={}'.format(bleu * 100))
                     break
 
             print('Epoch {} train in {} minutes'.format(epoch + 1, (time.time() - start_time) / 60.0))
@@ -238,6 +241,7 @@ def train_model():
         loss_epochs.close()
         np.savetxt(checkpoint_path + '/loss_summary.txt', loss_summary, fmt='%10.5f')
         return True
+
 
 train_model()
 # # train loop prevents 'nan' occurs
