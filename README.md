@@ -27,6 +27,8 @@ _ tst2012: bleu=11.949528136317774, max_order=4, smooth=False, beam_width=3
 
 _ tst2013: bleu=13.717554450112146, max_order=4, smooth=False, beam_width=3
 
+_ tst2012: bleu=7.450439831882477, max_order=4, smooth=False, beam_width=10
+
 VERSION 2
 
 Same graph as version 1

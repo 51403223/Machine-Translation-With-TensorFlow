@@ -110,3 +110,6 @@ class Embedding:
 
     def ids_to_words(self, list_ids, vocab):
         return [vocab[id] for id in list_ids]
+
+    def words_to_ids(self, list_words, dic):
+        return [dic[word] for word in list_words]

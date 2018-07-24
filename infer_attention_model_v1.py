@@ -273,5 +273,5 @@ def test_model(model_path, src_file_name, tgt_file_name, beam_width=1):
             bleu_score, *_ = bleu.compute_bleu(reshaped_references, translation, max_order=4, smooth=False)
             return bleu_score
 
-# bleu = test_model(model_path='checkpoint_v1/model-11', src_file_name='tst2012.vi', tgt_file_name='tst2012.en', beam_width=1)
+# bleu = test_model(model_path='checkpoint_v1/model-11', src_file_name='tst2012.vi', tgt_file_name='tst2012.en', beam_width=10)
 # print(bleu*100)
