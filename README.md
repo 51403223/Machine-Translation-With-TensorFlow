@@ -35,8 +35,13 @@ Difference: just last hidden state of Encoder pass to Decoder at first step, cel
 
 Greedy Search
 * with decay learning rate after every 4 epochs
+
 _ tst2012: bleu= 20.088968527140327, max_order=4, smooth=False
+
 _ tst2013: bleu= 22.970538348802798, max_order=4, smooth=False
+
 Beam Search:
+
 _ tst2012: bleu= 11.777050758373939, max_order=4, smooth=False
+
 _ tst2013: bleu= 13.556581446773427, max_order=4, smooth=False
