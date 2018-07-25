@@ -112,4 +112,10 @@ class Embedding:
         return [vocab[id] for id in list_ids]
 
     def words_to_ids(self, list_words, dic):
-        return [dic[word] for word in list_words]
+        result = []
+        for word in list_words:
+            try:
+                result.append(dic[word])
+            except KeyError:
+                result.append(1)
+        return result
