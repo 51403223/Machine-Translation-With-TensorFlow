@@ -14,7 +14,7 @@ unk_vocab_id = 1
 
 sentence = tf.placeholder(tf.int32)
 model_path = 'checkpoint_v1/model-11'
-beam_width = 1
+beam_width = 3
 
 data_path = 'data/'  # path of data folder
 embeddingHandler = embedding.Embedding()
@@ -123,7 +123,7 @@ def loop_fn(time, cell_output, cell_state, log_probs, beam_finished):
                 softmax = tf.nn.softmax(score)
                 log_prob = tf.log(softmax)
                 values, indices = tf.nn.top_k(log_prob, beam_width,
-                                              sorted=False)  # [batch, beam], [batch, beam]
+                                              sorted=True)  # [batch, beam], [batch, beam]
                 # Note: indices is ids of words as well
                 values = tf.add(values, tf.expand_dims(log_probs[:, i], -1))  # sum with previous log_prob
                 values_list.append(values)
@@ -132,7 +132,7 @@ def loop_fn(time, cell_output, cell_state, log_probs, beam_finished):
                                      axis=-1)  # [batch_size, beam_width*beam_width]
             concat_ilist = tf.concat(tf.unstack(indices_list, axis=0), axis=-1)
             top_values, index_in_vlist = tf.nn.top_k(concat_vlist, beam_width,
-                                                     sorted=False)  # [batch_size, beam_width]
+                                                     sorted=True)  # [batch_size, beam_width]
             # Note: in tf.nn.top_k, if sorted=False then it's values will be SORTED ASCENDING
 
             predicted_ids = get_word_ids(index_in_vlist, concat_ilist, batch_size)
@@ -144,6 +144,33 @@ def loop_fn(time, cell_output, cell_state, log_probs, beam_finished):
             parent_indexs = index_in_vlist // beam_width
             # find new_log_probs
             new_log_probs = top_values
+
+            # shift top-k according to beam_finished
+            # which means we will shift predicted_ids, new_log_probs, parent_indexs
+            def shift(tensor_1D, num_shift, vacancy_value):
+                """
+                shift from left to right
+                """
+                shift_value = tensor_1D[:beam_width - num_shift]
+                fill_vacancy = tf.fill([num_shift], vacancy_value)
+                return tf.concat([fill_vacancy, shift_value], axis=0)
+
+            ids_arr = []
+            probs_arr = []
+            parents_arr = []
+            num_shifts = tf.map_fn(lambda beam: tf.reduce_sum(tf.cast(beam, tf.int32)),
+                                   beam_finished, dtype=tf.int32)
+            # Note: we don't shift using new_beam_finished to avoid newly finish
+            # which will update -inf to final_log_probs
+            for i in range(batch_size):
+                num_shift = num_shifts[i]
+                ids_arr.append(shift(predicted_ids[i], num_shift, 0))
+                probs_arr.append(shift(new_log_probs[i], num_shift, -np.inf))
+                parents_arr.append(shift(parent_indexs[i], num_shift, -1))
+            predicted_ids = tf.stack(ids_arr)
+            new_log_probs = tf.stack(probs_arr)
+            parent_indexs = tf.stack(parents_arr)
+
             # define next_input
             finished = tf.reduce_all(elements_finished)
             next_input = tuple(
@@ -165,13 +192,13 @@ def loop_fn(time, cell_output, cell_state, log_probs, beam_finished):
             softmax = tf.nn.softmax(score)
             log_prob = tf.log(softmax)
             top_values, predicted_ids = tf.nn.top_k(log_prob, beam_width,
-                                                    sorted=False)  # [batch_size, beam_width]
+                                                    sorted=True)  # [batch_size, beam_width]
 
             new_beam_finished = beam_finished
 
             parent_indexs = tf.fill([batch_size, beam_width], value=-1)
 
-            new_log_probs = log_probs
+            new_log_probs = top_values
 
             finished = tf.reduce_all(elements_finished)
             next_input = tuple(

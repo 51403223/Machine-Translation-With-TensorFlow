@@ -33,7 +33,7 @@ from tensorflow.python.ops import rnn_cell_impl
 from tensorflow.python.ops import tensor_array_ops
 from tensorflow.python.ops import variable_scope as vs
 from tensorflow.python.util import nest
-# from tensorflow.python.ops import logging_ops
+from tensorflow.python.ops import logging_ops
 from tensorflow.python.ops import functional_ops
 from numpy import inf
 from numpy import arange
@@ -137,6 +137,8 @@ def raw_rnn_for_beam_search(cell, loop_fn,
         #     dynamic_size=True, clear_after_read=False).write(0, initial_parent_ids_value)
         parent_ids_in_beam_ta = tensor_array_ops.TensorArray(dtypes.int32, size=0,
                                                             dynamic_size=True, clear_after_read=False)
+        beam_width = array_ops.shape(log_probs)[-1]
+        index_for_finished_beam = array_ops.stack([math_ops.range(beam_width)] * batch_size)
 
         def condition(unused_time, elements_finished, *_):
             return math_ops.logical_not(math_ops.reduce_all(elements_finished))
@@ -182,13 +184,14 @@ def raw_rnn_for_beam_search(cell, loop_fn,
             # predicted_ids = logging_ops.Print(predicted_ids, [predicted_ids])
             predicted_ids = array_ops.where(
                 new_beam_finished, array_ops.fill(array_ops.shape(predicted_ids), eos_vocab_id), predicted_ids)
-            # predicted_ids = logging_ops.Print(predicted_ids, [predicted_ids], message='ids after where clause')
+            # predicted_ids = logging_ops.Print(predicted_ids, [predicted_ids[1]], message='ids[1] after where clause=')
             # should predict <eos> if finished
             # first update final_log_probs
             final_log_probs_not_updated = math_ops.equal(_final_log_probs, 1.)  # initial value is 1.0
             new_final_log_probs = array_ops.where(math_ops.logical_and(new_beam_finished, final_log_probs_not_updated),
                                                   new_log_probs, _final_log_probs)  # stay unchange if updated
-            # new_log_probs = logging_ops.Print(new_log_probs, [new_log_probs])
+            # new_final_log_probs = logging_ops.Print(new_final_log_probs, [new_final_log_probs[10]], message='new_final_log_probs=')
+            # new_log_probs = logging_ops.Print(new_log_probs, [new_log_probs[10]], message='new_log_probs=')
             # then change log_probs of finished beams to -inf to never be chosen by top_k
             new_log_probs = array_ops.where(new_beam_finished,
                                 array_ops.fill(array_ops.shape(log_probs), -inf), new_log_probs)
@@ -213,16 +216,19 @@ def raw_rnn_for_beam_search(cell, loop_fn,
                 return nest.map_structure(copy_fn, current, candidate)
 
             predicted_ids = _copy_some_through(zero_emit, predicted_ids)
-            # predicted_ids = logging_ops.Print(predicted_ids, [predicted_ids], message='ids after copy_some_through')
+            # predicted_ids = logging_ops.Print(predicted_ids, [predicted_ids[1]], message='ids[1] after copy_some_through')
             next_state = _copy_some_through(state, next_state)
 
             _predicted_ids_ta = nest.map_structure(
                 lambda ta, emit: ta.write(time, emit), _predicted_ids_ta, predicted_ids)
 
             parent_indexs = control_flow_ops.cond(math_ops.equal(time, 0),
-                            lambda: parent_indexs,  # pass it if time=0 (all filled with -1)
-                            lambda: array_ops.where(new_beam_finished,
-                                    parent_index_ta.read(time - 1), parent_indexs))  # prev_ids if beam is finish)
+                              lambda: parent_indexs,  # pass it if time=0 (all filled with -1)
+                              lambda: array_ops.where(new_beam_finished,
+                                                      index_for_finished_beam,  # true index 0,1,2,...,beam
+                                                      parent_indexs))
+
+            # parent_indexs = logging_ops.Print(parent_indexs, [parent_indexs[1]], message='parent[1]=')
             parent_index_ta = parent_index_ta.write(time, parent_indexs)
 
             elements_finished = math_ops.logical_or(elements_finished, next_finished)

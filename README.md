@@ -21,13 +21,14 @@ _ tst2013: bleu= 23.507148735156456, max_order=4, smooth=False
 _ tst2012: bleu= 18.770609325156386, max_order=4, smooth=False
 
 _ tst2013: bleu= 20.645434410841183, max_order=4, smooth=False
+
 b) Beam Search:
 
-_ tst2012: bleu=11.949528136317774, max_order=4, smooth=False, beam_width=3
+_ tst2012: bleu=18.110412614017374, max_order=4, smooth=False, beam_width=3
 
-_ tst2013: bleu=13.717554450112146, max_order=4, smooth=False, beam_width=3
+_ tst2013: bleu=21.06648755096919, max_order=4, smooth=False, beam_width=3
 
-_ tst2012: bleu=7.450439831882477, max_order=4, smooth=False, beam_width=10
+_ tst2012: bleu=, max_order=4, smooth=False, beam_width=10
 
 VERSION 2
 
@@ -44,6 +45,6 @@ _ tst2013: bleu= 22.970538348802798, max_order=4, smooth=False
 
 Beam Search:
 
-_ tst2012: bleu= 11.777050758373939, max_order=4, smooth=False
+_ tst2012: bleu= , max_order=4, smooth=False, beam=3
 
-_ tst2013: bleu= 13.556581446773427, max_order=4, smooth=False
+_ tst2013: bleu= , max_order=4, smooth=False, beam=3
