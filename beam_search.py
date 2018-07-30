@@ -182,8 +182,9 @@ def raw_rnn_for_beam_search(cell, loop_fn,
             nest.assert_same_structure(current_input, next_input)
             nest.assert_same_structure(_predicted_ids_ta, predicted_ids)
             # predicted_ids = logging_ops.Print(predicted_ids, [predicted_ids])
+            # <eos> if finished at previous step
             predicted_ids = array_ops.where(
-                new_beam_finished, array_ops.fill(array_ops.shape(predicted_ids), eos_vocab_id), predicted_ids)
+                beam_finished, array_ops.fill(array_ops.shape(predicted_ids), eos_vocab_id), predicted_ids)
             # predicted_ids = logging_ops.Print(predicted_ids, [predicted_ids[1]], message='ids[1] after where clause=')
             # should predict <eos> if finished
             # first update final_log_probs
@@ -222,9 +223,14 @@ def raw_rnn_for_beam_search(cell, loop_fn,
             _predicted_ids_ta = nest.map_structure(
                 lambda ta, emit: ta.write(time, emit), _predicted_ids_ta, predicted_ids)
 
+            # parent_indexs = control_flow_ops.cond(math_ops.equal(time, 0),
+            #                 lambda: parent_indexs,  # pass it if time=0 (all filled with -1)
+            #                 lambda: array_ops.where(new_beam_finished,
+            #                         parent_index_ta.read(time - 1), parent_indexs))  # prev_ids if beam is finish)
+
             parent_indexs = control_flow_ops.cond(math_ops.equal(time, 0),
                               lambda: parent_indexs,  # pass it if time=0 (all filled with -1)
-                              lambda: array_ops.where(new_beam_finished,
+                              lambda: array_ops.where(beam_finished,
                                                       index_for_finished_beam,  # true index 0,1,2,...,beam
                                                       parent_indexs))
 

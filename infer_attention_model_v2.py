@@ -199,7 +199,7 @@ def test_model(model_path, src_file_name, tgt_file_name, beam_width=1):
                     predicted_ids = get_word_ids(index_in_vlist, concat_ilist, batch_size)
                     predicted_ids = tf.stack(predicted_ids)  # [batch_size, beam_width]
 
-                    new_beam_finished = tf.logical_or(tf.equal(predicted_ids, eos_vocab_id), beam_finished)
+                    # new_beam_finished = tf.logical_or(tf.equal(predicted_ids, eos_vocab_id), beam_finished)
 
                     # find parent_ids that match word_ids_to_add
                     parent_indexs = index_in_vlist // beam_width
@@ -225,12 +225,18 @@ def test_model(model_path, src_file_name, tgt_file_name, beam_width=1):
                     # which will update -inf to final_log_probs
                     for i in range(batch_size):
                         num_shift = num_shifts[i]
-                        ids_arr.append(shift(predicted_ids[i], num_shift, 0))
+                        ids_arr.append(shift(predicted_ids[i], num_shift, eos_vocab_id))
                         probs_arr.append(shift(new_log_probs[i], num_shift, -np.inf))
                         parents_arr.append(shift(parent_indexs[i], num_shift, -1))
+                    valid_shape = tf.shape(beam_finished)
                     predicted_ids = tf.stack(ids_arr)
+                    predicted_ids = tf.reshape(predicted_ids, valid_shape)
                     new_log_probs = tf.stack(probs_arr)
+                    new_log_probs = tf.reshape(new_log_probs, valid_shape)
                     parent_indexs = tf.stack(parents_arr)
+                    parent_indexs = tf.reshape(parent_indexs, valid_shape)
+
+                    new_beam_finished = tf.logical_or(tf.equal(predicted_ids, eos_vocab_id), beam_finished)
 
                     # define next_input
                     finished = tf.reduce_all(elements_finished)
@@ -324,5 +330,5 @@ def test_model(model_path, src_file_name, tgt_file_name, beam_width=1):
             return bleu_score
 
 
-# bleu = test_model(model_path='checkpoint_v2/model-11', src_file_name='tst2013.vi', tgt_file_name='tst2013.en', beam_width=3)
-# print(bleu*100)
+bleu = test_model(model_path='checkpoint_v2/model-11', src_file_name='tst2013.vi', tgt_file_name='tst2013.en', beam_width=10)
+print(bleu*100)
