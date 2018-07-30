@@ -4,8 +4,7 @@ import numpy as np
 from beam_search import raw_rnn_for_beam_search
 from beam_search import extract_from_tree
 from beam_search import get_word_ids
-import os
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+tf.logging.set_verbosity(tf.logging.ERROR)
 
 
 class MachineTranslator:
