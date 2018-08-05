@@ -49,4 +49,4 @@ Beam Search:
 
 _ tst2012: bleu=, max_order=4, smooth=False, beam=3
 
-_ tst2013: bleu=21.15102903522015, max_order=4, smooth=False, beam=3
+_ tst2013: bleu=21.15102903522015, max_order=4, smooth=False, beam=10

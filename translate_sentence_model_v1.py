@@ -42,7 +42,7 @@ class MachineTranslator:
 
             ################## create dataset ######################
             batch_size = 64
-            sentence = tf.concat([[sos_vocab_id], sentence], axis=0)
+            sentence = tf.concat([sentence, [eos_vocab_id]], axis=0)
             x_batch = tf.gather([sentence], [0] * batch_size)  # duplicate sentence into a batch, shape [batch, len]
             len_sentence = tf.shape(sentence)[-1]
             #################### build graph ##########################

@@ -330,5 +330,5 @@ def test_model(model_path, src_file_name, tgt_file_name, beam_width=1):
             return bleu_score
 
 
-bleu = test_model(model_path='checkpoint_v2/model-11', src_file_name='tst2013.vi', tgt_file_name='tst2013.en', beam_width=10)
+bleu = test_model(model_path='checkpoint_v2/model-11', src_file_name='tst2012.vi', tgt_file_name='tst2012.en', beam_width=3)
 print(bleu*100)
